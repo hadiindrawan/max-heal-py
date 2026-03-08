@@ -23,6 +23,8 @@ from playwright.sync_api import TimeoutError as SyncTimeout
 if TYPE_CHECKING:
     from playwright.sync_api import Locator
 
+from .flaky_guard import flaky, flaky_sync
+
 logger = logging.getLogger(__name__)
 _SYNC_ERRORS = (SyncTimeout, SyncError)
 
@@ -103,6 +105,19 @@ class MaxHealPage:
                         pass
                 return loc
             return wrapper
+            
+        if (name == "goto" or name.startswith("wait_for_")) and name != "wait_for_selector" and callable(attr):
+            def network_retry_wrapper(*args: Any, **kwargs: Any) -> Any:
+                if not self._heal_enabled:
+                    return attr(*args, **kwargs)
+                    
+                @flaky_sync(max_retries=self._max_retries, delay=1.5, exceptions=_SYNC_ERRORS)
+                def _run_network_call():
+                    logger.info(f"[MaxHeal] Intercepting network call: page.{name}() with retries")
+                    return attr(*args, **kwargs)
+                    
+                return _run_network_call()
+            return network_retry_wrapper
             
         return attr
 
@@ -192,6 +207,21 @@ class AsyncMaxHealPage:
                         pass
                 return loc
             return wrapper
+            
+        if (name == "goto" or name.startswith("wait_for_")) and name != "wait_for_selector" and callable(attr):
+            def async_network_retry_wrapper(*args: Any, **kwargs: Any) -> Any:
+                if not self._heal_enabled:
+                    return attr(*args, **kwargs)
+                    
+                from playwright.async_api import Error as AE, TimeoutError as AT
+                
+                @flaky(max_retries=self._max_retries, delay=1.5, exceptions=(AT, AE))
+                async def _run_async_network_call():
+                    logger.info(f"[MaxHeal] Intercepting async network call: page.{name}() with retries")
+                    return await attr(*args, **kwargs)
+                    
+                return _run_async_network_call()
+            return async_network_retry_wrapper
             
         return attr
 
