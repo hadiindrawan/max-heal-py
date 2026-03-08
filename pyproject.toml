@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "max-heal"
+version = "0.1.1"
+description = "Playwright wrapper with LLM-powered auto-heal and flaky auto-fix"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["playwright", "automation", "testing", "auto-heal", "llm", "flaky"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "playwright>=1.40.0",
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.20",
+]
+
+[project.urls]
+Homepage = "https://github.com/hadiindrawan/max-heal-py"
+Repository = "https://github.com/hadiindrawan/max-heal-py"
+
+[tool.setuptools.package-dir]
+max_heal = "src"
+
+[tool.setuptools]
+packages = ["max_heal"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
