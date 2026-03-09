@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "max-heal"
-version = "0.2.2"
+version = "0.2.0"
 description = "Playwright wrapper with LLM-powered auto-heal and flaky auto-fix"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -37,7 +37,7 @@ Repository = "https://github.com/hadiindrawan/max-heal-py"
 max_heal = "src"
 
 [tool.setuptools]
-packages = ["max_heal", "max_heal.integrations"]
+packages = ["max_heal"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

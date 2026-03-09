@@ -26,6 +26,7 @@ from .strategies import (
     AsyncOverlayStrategy,
     AsyncStrictViolationStrategy,
 )
+from .integrations.allure import integrate_allure
 
 
 def create_maxheal_page(
@@ -61,6 +62,10 @@ def create_maxheal_page(
         A fully wired MaxHealPage.
     """
     cfg = config or MaxHealConfig()
+    
+    if cfg.use_allure:
+        integrate_allure()
+        
     llm = SyncOpenRouterClient(cfg)
     dom = PlaywrightDomSnapshot()
     engine = SyncHealEngine(llm_client=llm, dom_snapshot=dom)
@@ -89,6 +94,10 @@ def create_async_maxheal_page(
 ) -> AsyncMaxHealPage:
     """Create an async AsyncMaxHealPage with all 5 default strategies wired up."""
     cfg = config or MaxHealConfig()
+    
+    if cfg.use_allure:
+        integrate_allure()
+        
     llm = AsyncOpenRouterClient(cfg)
     dom = AsyncPlaywrightDomSnapshot()
     engine = AsyncHealEngine(llm_client=llm, dom_snapshot=dom)

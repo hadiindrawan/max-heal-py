@@ -6,7 +6,7 @@ MaxHeal — Playwright wrapper with LLM-powered auto-heal and flaky auto-fix.
 from .config import MaxHealConfig
 from .factory import create_maxheal_page
 from .flaky_guard import flaky, flaky_sync
-from .heal_engine import global_context
+from .heal_engine import global_context, max_step
 from .maxheal_page import AsyncMaxHealPage, MaxHealPage
 
 # ── Global expect Monkeypatch ──────────────────────────────────────────────────
@@ -177,7 +177,7 @@ __all__ = [
     # Primary
     "MaxHealConfig", "MaxHealPage", "AsyncMaxHealPage",
     "create_maxheal_page", "create_async_maxheal_page",
-    "flaky_sync", "flaky", "global_context",
+    "flaky_sync", "flaky", "global_context", "max_step",
     # FlakeAnalyzer
     "FlakeAnalyzer", "FlakeCategory", "StrategyResult",
     # Strategies
@@ -190,4 +190,4 @@ __all__ = [
     "SyncOpenRouterClient", "SyncHealEngine", "PlaywrightDomSnapshot",
     "AsyncOpenRouterClient", "AsyncHealEngine", "AsyncPlaywrightDomSnapshot",
 ]
-__version__ = "0.1.2"
+__version__ = "0.2.0"
