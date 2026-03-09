@@ -79,7 +79,12 @@ def max_step(description: str):
             import allure
             # When allure is integrated, we call the native block to ensure it generates in the report
             # The monkeypatch wrapper defined inside integrations/allure.py intercepts this natively!
-            context_block = allure.step(description)
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            jakarta_time = now + timedelta(hours=7)
+            step_description = f"{jakarta_time.strftime('%Y-%m-%d %H:%M:%S')} - {description}"
+            
+            context_block = allure.step(step_description)
         except ImportError:
             from contextlib import nullcontext
             context_block = nullcontext()
