@@ -48,19 +48,41 @@ def test_login(page: Page):
     page.locator("#btn-signin").click()
 ```
 
-## Advanced AI Context (Allure/Logs)
-MaxHeal allows you to inject testing metadata directly into the LLM's brain so it understands *what* the automation is actually trying to do. Just populate the `global_context` dictionary.
+## Providing "Intent" Context (V2)
+
+MaxHeal works best when it knows *what* the user is trying to accomplish. You can inject this intent directly into the AI's brain using the built-in `max_step` context manager.
 
 ```python
-from max_heal import global_context
-import allure
+from max_heal import max_step
 
-def add_step(step_name):
-    global_context["Current Test Step"] = step_name
-    allure.step(step_name)
+def test_login(page):
+    with max_step("User fills out the login form with admin credentials"):
+        page.fill("#user", "admin")
+        page.fill("#pass", "secret")
+        
+    with max_step("User clicks the submit button"):
+        page.click(".btn-primary")
+```
+If a selector fails anywhere inside a `max_step` block, that exact description is routed to the LLM to help exactly pinpoint the missing button or field!
+
+### Inline Intents
+You can also pass `intent=` directly to actions for laser-focused precision:
+```python
+page.click("#submit", intent="The login button on the top right corner")
 ```
 
+### Native Allure Integration
 
+If your framework already uses `allure.step`, you don't even need to rewrite your code to use `max_step`. MaxHeal ships with a native Allure plugin that automatically parses your existing Allure steps and feeds them to the LLM.
+
+Simply enable it in your `MaxHealConfig`:
+
+```python
+MAXHEAL_CONFIG = MaxHealConfig(
+    api_key="...",
+    use_allure=True # Automatically syncs allure.step() into MaxHeal's LLM context!
+)
+```
 
 ## Configuration
 
@@ -72,6 +94,12 @@ def add_step(step_name):
 | `max_retries`  | `3`                        | Heal attempts per selector failure     |
 | `heal_enabled` | `True`                     | Toggle auto-healing globally           |
 | `timeout`      | `30.0`                     | HTTP timeout for LLM calls (seconds)   |
+| `use_allure`   | `False`                    | Hook allure.step into LLM context      |
+
+## Concurrency & Thread-Safety (pytest-xdist)
+
+MaxHeal is **100% thread-safe and async-safe**. 
+All intents, steps, and `global_context` mutations are securely bound using Python's native `ContextVars`. This means you can run hundreds of UI tests concurrently using `pytest -n 16` or `asyncio.gather()`, and the LLM contexts will *never* leak or cross-pollinate between test workers!
 
 ## How It Works
 

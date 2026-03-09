@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 import re
 from typing import TYPE_CHECKING
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page as SyncPage
@@ -17,9 +19,87 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Global dictionary for dynamic LLM context (e.g., current test step, trace info)
-# Add keys here and they will be populated dynamically into the LLM prompt.
-global_context: dict[str, str] = {}
+# A ContextVar holds an isolated state for each asyncio task/thread.
+_context_state: ContextVar[dict[str, str]] = ContextVar("maxheal_context", default={})
+_ALLURE_INTEGRATED = False
+
+class ContextProxy:
+    """A proxy dictionary that safely routes operations to a thread/task-local ContextVar."""
+    def __setitem__(self, key: str, value: str) -> None:
+        state = _context_state.get().copy()
+        state[key] = value
+        _context_state.set(state)
+        
+    def __getitem__(self, key: str) -> str:
+        return _context_state.get()[key]
+        
+    def __contains__(self, key: str) -> bool:
+        return key in _context_state.get()
+
+    def get(self, key: str, default: str | None = None) -> str | None:
+        return _context_state.get().get(key, default)
+        
+    def items(self):
+        return _context_state.get().items()
+        
+    def keys(self):
+        return _context_state.get().keys()
+        
+    def clear(self) -> None:
+        _context_state.set({})
+        
+    def pop(self, key: str, default: str | None = None) -> str | None:
+        state = _context_state.get().copy()
+        try:
+            val = state.pop(key)
+        except KeyError:
+            if default is not None:
+                return default
+            raise
+        _context_state.set(state)
+        return val
+
+# The proxy object. Looks like a dict, acts like a dict, but is thread/async safe.
+global_context = ContextProxy()
+
+@contextmanager
+def max_step(description: str):
+    """Context manager to declare the intent of the upcoming Playwright actions.
+    
+    Any failures inside this block will prioritize this description when
+    querying the LLM for a healed selector. If Allure is installed, this
+    also automatically creates an Allure step in the test report.
+    """
+    prev_step = global_context.get("Current Auto Step")
+    global_context["Current Auto Step"] = description
+    
+    # Try to natively execute an Allure step block if explicitly integrated
+    if _ALLURE_INTEGRATED:
+        try:
+            import allure
+            # When allure is integrated, we call the native block to ensure it generates in the report
+            # The monkeypatch wrapper defined inside integrations/allure.py intercepts this natively!
+            from datetime import datetime, timezone, timedelta
+            now = datetime.now(timezone.utc)
+            jakarta_time = now + timedelta(hours=7)
+            step_description = f"{jakarta_time.strftime('%Y-%m-%d %H:%M:%S')} - {description}"
+            
+            context_block = allure.step(step_description)
+        except ImportError:
+            from contextlib import nullcontext
+            context_block = nullcontext()
+    else:
+        from contextlib import nullcontext
+        context_block = nullcontext()
+        
+    try:
+        with context_block:
+            yield
+    finally:
+        if prev_step is not None:
+            global_context["Current Auto Step"] = prev_step
+        else:
+            global_context.pop("Current Auto Step", None)
 
 _PROMPT = """\
 You are a Playwright test automation expert.

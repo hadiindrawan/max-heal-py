@@ -15,6 +15,7 @@ class MaxHealConfig:
         max_retries:  Max heal attempts per selector failure.
         heal_enabled: Toggle auto-healing globally.
         timeout:      HTTP timeout (seconds) for LLM calls.
+        use_allure:   Automatically hook allure.step into LLM context.
     """
 
     api_key: str = ""
@@ -23,6 +24,7 @@ class MaxHealConfig:
     max_retries: int = 3
     heal_enabled: bool = True
     timeout: float = 30.0
+    use_allure: bool = False
 
 
 

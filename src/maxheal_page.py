@@ -57,17 +57,17 @@ class MaxHealPage:
     # Heal-aware action methods
     # ------------------------------------------------------------------
 
-    def click(self, selector: str, **kwargs: Any) -> None:
+    def click(self, selector: str, intent: str | None = None, **kwargs: Any) -> None:
         """Click; routes failures through FlakeAnalyzer."""
-        self._act("click", selector, **kwargs)
+        self._act("click", selector, intent, **kwargs)
 
-    def fill(self, selector: str, value: str, **kwargs: Any) -> None:
+    def fill(self, selector: str, value: str, intent: str | None = None, **kwargs: Any) -> None:
         """Fill; routes failures through FlakeAnalyzer."""
-        self._act("fill", selector, value, **kwargs)
+        self._act("fill", selector, intent, value, **kwargs)
 
-    def wait_for_selector(self, selector: str, **kwargs: Any) -> Any:
+    def wait_for_selector(self, selector: str, intent: str | None = None, **kwargs: Any) -> Any:
         """Wait for selector; routes failures through FlakeAnalyzer."""
-        return self._act("wait_for_selector", selector, **kwargs)
+        return self._act("wait_for_selector", selector, intent, **kwargs)
 
     def locator(self, selector: str, *args: Any, **kwargs: Any) -> "Locator":
         """Return a native Playwright Locator. Healing happens lazily during expect() or click()."""
@@ -125,35 +125,49 @@ class MaxHealPage:
     # Internal heal loop
     # ------------------------------------------------------------------
 
-    def _act(self, method: str, selector: str, *args: Any, **kwargs: Any) -> Any:
+    def _act(self, method: str, selector: str, intent: str | None, *args: Any, **kwargs: Any) -> Any:
+        from .heal_engine import global_context
         current = selector
         last_exc: Exception | None = None
+        
+        # Temporarily apply explicit intent if provided
+        prev_intent = global_context.get("Explicit Action Intent")
+        if intent:
+            global_context["Explicit Action Intent"] = intent
 
-        for attempt in range(1, self._max_retries + 1):
-            try:
-                return getattr(self._page, method)(current, *args, **kwargs)
-
-            except _SYNC_ERRORS as exc:
-                last_exc = exc
-                if not self._heal_enabled:
-                    raise
-
-                logger.warning(
-                    "[MaxHeal] Attempt %d/%d — %s(%r) failed: %s",
-                    attempt, self._max_retries, method, current, exc,
-                )
-
-                result = self._analyzer.handle(self._page, current, str(exc))
-
-                if result.wait_ms > 0:
-                    time.sleep(result.wait_ms / 1000)
-
-                if result.healed_selector:
-                    current = result.healed_selector
-                elif not result.should_retry:
-                    raise  # no strategy could help
-
-        raise last_exc  # type: ignore[misc]
+        try:
+            for attempt in range(1, self._max_retries + 1):
+                try:
+                    kwargs_clean = {k: v for k, v in kwargs.items() if k != "intent"}
+                    return getattr(self._page, method)(current, *args, **kwargs_clean)
+    
+                except _SYNC_ERRORS as exc:
+                    last_exc = exc
+                    if not self._heal_enabled:
+                        raise
+    
+                    logger.warning(
+                        "[MaxHeal] Attempt %d/%d — %s(%r) failed: %s",
+                        attempt, self._max_retries, method, current, exc,
+                    )
+    
+                    result = self._analyzer.handle(self._page, current, str(exc))
+    
+                    if result.wait_ms > 0:
+                        time.sleep(result.wait_ms / 1000)
+    
+                    if result.healed_selector:
+                        current = result.healed_selector
+                    elif not result.should_retry:
+                        raise  # no strategy could help
+    
+            raise last_exc  # type: ignore[misc]
+        finally:
+            if intent:
+                if prev_intent is not None:
+                    global_context["Explicit Action Intent"] = prev_intent
+                else:
+                    global_context.pop("Explicit Action Intent", None)
 
 
 class AsyncMaxHealPage:
@@ -171,14 +185,14 @@ class AsyncMaxHealPage:
         self._max_retries = max_retries
         self._heal_enabled = heal_enabled
 
-    async def click(self, selector: str, **kwargs: Any) -> None:
-        await self._act("click", selector, **kwargs)
+    async def click(self, selector: str, intent: str | None = None, **kwargs: Any) -> None:
+        await self._act("click", selector, intent, **kwargs)
 
-    async def fill(self, selector: str, value: str, **kwargs: Any) -> None:
-        await self._act("fill", selector, value, **kwargs)
+    async def fill(self, selector: str, value: str, intent: str | None = None, **kwargs: Any) -> None:
+        await self._act("fill", selector, intent, value, **kwargs)
 
-    async def wait_for_selector(self, selector: str, **kwargs: Any) -> Any:
-        return await self._act("wait_for_selector", selector, **kwargs)
+    async def wait_for_selector(self, selector: str, intent: str | None = None, **kwargs: Any) -> Any:
+        return await self._act("wait_for_selector", selector, intent, **kwargs)
 
     async def locator(self, selector: str, *args: Any, **kwargs: Any) -> Any:
         """Return a native Playwright Locator."""
@@ -225,27 +239,42 @@ class AsyncMaxHealPage:
             
         return attr
 
-    async def _act(self, method: str, selector: str, *args: Any, **kwargs: Any) -> Any:
+    async def _act(self, method: str, selector: str, intent: str | None, *args: Any, **kwargs: Any) -> Any:
         import asyncio
         from playwright.async_api import Error as AE, TimeoutError as AT
+        from .heal_engine import global_context
+        
         current = selector
         last_exc: Exception | None = None
-        for attempt in range(1, self._max_retries + 1):
-            try:
-                return await getattr(self._page, method)(current, *args, **kwargs)
-            except (AT, AE) as exc:
-                last_exc = exc
-                if not self._heal_enabled:
-                    raise
-                logger.warning(
-                    "[MaxHeal] Attempt %d/%d — %s(%r) failed: %s",
-                    attempt, self._max_retries, method, current, exc,
-                )
-                result = await self._analyzer.handle(self._page, current, str(exc))
-                if result.wait_ms > 0:
-                    await asyncio.sleep(result.wait_ms / 1000)
-                if result.healed_selector:
-                    current = result.healed_selector
-                elif not result.should_retry:
-                    raise
-        raise last_exc  # type: ignore[misc]
+        
+        prev_intent = global_context.get("Explicit Action Intent")
+        if intent:
+            global_context["Explicit Action Intent"] = intent
+            
+        try:
+            for attempt in range(1, self._max_retries + 1):
+                try:
+                    kwargs_clean = {k: v for k, v in kwargs.items() if k != "intent"}
+                    return await getattr(self._page, method)(current, *args, **kwargs_clean)
+                except (AT, AE) as exc:
+                    last_exc = exc
+                    if not self._heal_enabled:
+                        raise
+                    logger.warning(
+                        "[MaxHeal] Attempt %d/%d — %s(%r) failed: %s",
+                        attempt, self._max_retries, method, current, exc,
+                    )
+                    result = await self._analyzer.handle(self._page, current, str(exc))
+                    if result.wait_ms > 0:
+                        await asyncio.sleep(result.wait_ms / 1000)
+                    if result.healed_selector:
+                        current = result.healed_selector
+                    elif not result.should_retry:
+                        raise
+            raise last_exc  # type: ignore[misc]
+        finally:
+            if intent:
+                if prev_intent is not None:
+                    global_context["Explicit Action Intent"] = prev_intent
+                else:
+                    global_context.pop("Explicit Action Intent", None)
